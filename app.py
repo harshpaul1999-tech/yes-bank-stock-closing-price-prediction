@@ -99,6 +99,15 @@ def get_project_assets() -> Dict[str, object]:
     model_df = build_modeling_frame(raw_df)
     metrics_df, _, split_payload = evaluate_models(model_df, FEATURE_COLUMNS)
     final_model, final_payload, _ = fit_final_model(model_df, FEATURE_COLUMNS)
+    holdout_results = pd.DataFrame(
+        {
+            "Date": final_payload["test_df"]["Date"].dt.strftime("%b-%Y").to_numpy(),
+            "Actual": final_payload["y_test"].to_numpy(),
+            "Predicted": final_payload["holdout_predictions"],
+        }
+    )
+    holdout_results["Residual"] = holdout_results["Actual"] - holdout_results["Predicted"]
+    holdout_results["Absolute Error"] = holdout_results["Residual"].abs()
     permutation_df = permutation_feature_importance(
         final_model,
         final_payload["x_test"],
@@ -112,6 +121,7 @@ def get_project_assets() -> Dict[str, object]:
         "metrics_df": metrics_df,
         "final_model": final_model,
         "final_payload": final_payload,
+        "holdout_results": holdout_results,
         "permutation_df": permutation_df,
         "coefficient_df": coefficient_df,
         "split_payload": split_payload,
@@ -204,6 +214,7 @@ def render_overview_tab(assets: Dict[str, object]) -> None:
     raw_df = assets["raw_df"]
     metrics_df = assets["metrics_df"]
     final_payload = assets["final_payload"]
+    holdout_results = assets["holdout_results"]
     permutation_df = assets["permutation_df"]
 
     latest_row = raw_df.iloc[-1]
@@ -279,6 +290,29 @@ def render_overview_tab(assets: Dict[str, object]) -> None:
             """
         )
         st.markdown("</div>", unsafe_allow_html=True)
+
+    st.markdown('<div class="section-card">', unsafe_allow_html=True)
+    st.subheader("Holdout Actual vs Predicted Table")
+    st.markdown(
+        "This is the full chronological holdout comparison used in the notebook, including residuals and absolute error."
+    )
+    st.dataframe(
+        holdout_results.style.format(
+            {
+                "Actual": "{:.2f}",
+                "Predicted": "{:.2f}",
+                "Residual": "{:.2f}",
+                "Absolute Error": "{:.2f}",
+            }
+        ),
+        use_container_width=True,
+        hide_index=True,
+        height=420,
+    )
+    st.caption(
+        "Positive residuals mean the actual close was above the model prediction; negative residuals mean the model overpredicted."
+    )
+    st.markdown("</div>", unsafe_allow_html=True)
 
 
 def render_predictor_tab(assets: Dict[str, object]) -> None:
