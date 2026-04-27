@@ -5,21 +5,20 @@ import sys
 from pathlib import Path
 from typing import Dict, List
 
-PROJECT_ROOT = Path(__file__).resolve().parent
-os.environ.setdefault("MPLCONFIGDIR", str(PROJECT_ROOT / ".mplconfig"))
-
-import matplotlib.pyplot as plt
 import pandas as pd
 import streamlit as st
+
+PROJECT_ROOT = Path(__file__).resolve().parent
 SRC_PATH = PROJECT_ROOT / "src"
 if str(SRC_PATH) not in sys.path:
     sys.path.append(str(SRC_PATH))
 
 try:
-    from openai import OpenAI
+    from google import genai
 except ModuleNotFoundError:
-    OpenAI = None
+    genai = None
 
+import dashboard as dashboard_view  # noqa: E402
 from yes_bank_ml import (  # noqa: E402
     FEATURE_COLUMNS,
     build_modeling_frame,
@@ -30,11 +29,12 @@ from yes_bank_ml import (  # noqa: E402
     next_forecast_date,
     permutation_feature_importance,
     predict_close_price,
+    resolve_default_data_path,
 )
 
 
 st.set_page_config(
-    page_title="Regression - Yes Bank Stock Closing Price Prediction",
+    page_title="Yes Bank Stock Closing Price Prediction",
     page_icon="chart_with_upwards_trend",
     layout="wide",
 )
@@ -46,19 +46,19 @@ def inject_styles() -> None:
         <style>
         .stApp {
             background:
-                radial-gradient(circle at top left, rgba(248, 214, 120, 0.22), transparent 32%),
-                radial-gradient(circle at top right, rgba(61, 123, 189, 0.18), transparent 30%),
-                linear-gradient(180deg, #f8f5ee 0%, #eef3f9 100%);
-            color: #0f2233;
+                radial-gradient(circle at top left, rgba(255, 210, 120, 0.25), transparent 28%),
+                radial-gradient(circle at top right, rgba(25, 99, 156, 0.20), transparent 30%),
+                linear-gradient(180deg, #f8f4ee 0%, #eef3f8 100%);
+            color: #112336;
             font-family: "Aptos", "Segoe UI", sans-serif;
         }
         .hero {
             padding: 1.4rem 1.6rem;
-            border-radius: 20px;
-            background: linear-gradient(135deg, rgba(14, 35, 52, 0.96), rgba(26, 70, 104, 0.92));
-            color: #f5f7fb;
-            border: 1px solid rgba(255, 255, 255, 0.08);
-            box-shadow: 0 20px 50px rgba(17, 38, 58, 0.20);
+            border-radius: 22px;
+            background: linear-gradient(135deg, #102738 0%, #174e72 58%, #206b81 100%);
+            color: #f7f9fc;
+            border: 1px solid rgba(255,255,255,0.08);
+            box-shadow: 0 18px 42px rgba(16, 39, 56, 0.24);
             margin-bottom: 1rem;
         }
         .hero h1 {
@@ -68,18 +68,19 @@ def inject_styles() -> None:
         }
         .hero p {
             margin: 0.45rem 0 0;
-            color: #d8e4f2;
+            color: #d7e5f1;
             font-size: 1rem;
         }
         .section-card {
-            background: rgba(255, 255, 255, 0.76);
-            border: 1px solid rgba(15, 34, 51, 0.08);
+            background: rgba(255, 255, 255, 0.80);
+            border: 1px solid rgba(17, 35, 54, 0.08);
             border-radius: 18px;
-            padding: 1rem 1.1rem;
+            padding: 1rem 1.15rem;
             box-shadow: 0 10px 24px rgba(20, 40, 60, 0.08);
+            margin-bottom: 1rem;
         }
-        .tiny-note {
-            color: #495d6d;
+        .mini-note {
+            color: #516273;
             font-size: 0.92rem;
         }
         </style>
@@ -90,7 +91,8 @@ def inject_styles() -> None:
 
 @st.cache_data(show_spinner=False)
 def get_raw_data() -> pd.DataFrame:
-    return load_yes_bank_data(PROJECT_ROOT / "data" / "yes_bank_stock_prices.csv")
+    data_path = resolve_default_data_path(PROJECT_ROOT)
+    return load_yes_bank_data(data_path)
 
 
 @st.cache_resource(show_spinner=False)
@@ -108,6 +110,7 @@ def get_project_assets() -> Dict[str, object]:
     )
     holdout_results["Residual"] = holdout_results["Actual"] - holdout_results["Predicted"]
     holdout_results["Absolute Error"] = holdout_results["Residual"].abs()
+
     permutation_df = permutation_feature_importance(
         final_model,
         final_payload["x_test"],
@@ -115,227 +118,180 @@ def get_project_assets() -> Dict[str, object]:
         FEATURE_COLUMNS,
     )
     coefficient_df = model_coefficients(final_model, FEATURE_COLUMNS)
+
     return {
         "raw_df": raw_df,
         "model_df": model_df,
         "metrics_df": metrics_df,
+        "split_payload": split_payload,
         "final_model": final_model,
         "final_payload": final_payload,
         "holdout_results": holdout_results,
         "permutation_df": permutation_df,
         "coefficient_df": coefficient_df,
-        "split_payload": split_payload,
     }
 
 
-def get_azure_client() -> OpenAI:
-    if OpenAI is None:
+def gemini_enabled() -> bool:
+    return genai is not None and bool(os.getenv("GEMINI_API_KEY"))
+
+
+def get_gemini_client():
+    if genai is None:
         raise ValueError(
-            "The `openai` package is not installed. Install dependencies from requirements.txt to enable the Azure assistant."
+            "The `google-genai` package is not installed. Install requirements.txt to enable Gemini."
         )
-    endpoint = os.getenv("AZURE_OPENAI_ENDPOINT", "").rstrip("/")
-    api_key = os.getenv("AZURE_OPENAI_API_KEY", "")
-    if not endpoint or not api_key:
-        raise ValueError(
-            "Set AZURE_OPENAI_ENDPOINT and AZURE_OPENAI_API_KEY to enable the Azure assistant."
-        )
-    return OpenAI(api_key=api_key, base_url="{0}/openai/v1/".format(endpoint))
+    api_key = os.getenv("GEMINI_API_KEY", "")
+    if not api_key:
+        raise ValueError("Set GEMINI_API_KEY to enable the Gemini copilot.")
+    return genai.Client(api_key=api_key)
 
 
-def azure_assistant_enabled() -> bool:
-    if OpenAI is None:
-        return False
-    required_vars = [
-        os.getenv("AZURE_OPENAI_ENDPOINT"),
-        os.getenv("AZURE_OPENAI_API_KEY"),
-        os.getenv("AZURE_OPENAI_DEPLOYMENT_NAME"),
-    ]
-    return all(required_vars)
-
-
-def build_llm_context(assets: Dict[str, object]) -> str:
+def build_gemini_context(assets: Dict[str, object]) -> str:
     raw_df = assets["raw_df"]
     metrics_df = assets["metrics_df"]
+    holdout_results = assets["holdout_results"]
     permutation_df = assets["permutation_df"]
     latest_row = raw_df.iloc[-1]
 
-    context_lines = [
-        "Project: Regression - Yes Bank Stock Closing Price Prediction",
-        "Subtitle: Machine Learning & GenAI with Microsoft Azure",
-        "Dataset span: {0:%b %Y} to {1:%b %Y}".format(raw_df["Date"].min(), raw_df["Date"].max()),
-        "Rows: {0}".format(len(raw_df)),
-        "Target: Monthly closing price",
-        "Latest actual close: {0:.2f} in {1:%b %Y}".format(latest_row["Close"], latest_row["Date"]),
-        "Top model comparison rows:",
-        metrics_df.head(3).to_string(index=False),
-        "Most influential features by permutation importance:",
-        permutation_df.head(5).to_string(index=False),
-        "Business context: governance concerns after 2018 and the COVID-era shock are modeled as structural break flags.",
-        "Guardrail: explain outcomes only from the supplied project context; do not invent unseen performance claims.",
-    ]
-    return "\n".join(context_lines)
-
-
-def ask_azure_assistant(question: str, assets: Dict[str, object], chat_history: List[Dict[str, str]]) -> str:
-    deployment_name = os.getenv("AZURE_OPENAI_DEPLOYMENT_NAME", "")
-    if not deployment_name:
-        raise ValueError("Set AZURE_OPENAI_DEPLOYMENT_NAME to enable the Azure assistant.")
-
-    transcript = []
-    for item in chat_history[-6:]:
-        transcript.append("{0}: {1}".format(item["role"].upper(), item["content"]))
-
-    system_prompt = (
-        "You are helping a candidate explain a Yes Bank stock price regression project in interviews. "
-        "Keep answers practical, concise, and tied to the supplied project context. "
-        "When discussing risk, mention that same-month Open/High/Low inputs make this closer to a price estimation system "
-        "than a pure ex-ante trading forecast."
-    )
-    user_prompt = "\n\n".join(
+    return "\n".join(
         [
-            build_llm_context(assets),
+            "Project: Yes Bank Stock Closing Price Prediction",
+            "Stack: Regression notebook, Streamlit dashboard, Gemini-powered Q&A",
+            "Dataset rows: {0}".format(len(raw_df)),
+            "Date range: {0:%b %Y} to {1:%b %Y}".format(raw_df["Date"].min(), raw_df["Date"].max()),
+            "Latest actual close: {0:.2f} ({1:%b %Y})".format(latest_row["Close"], latest_row["Date"]),
+            "Evaluation summary:",
+            metrics_df.to_string(index=False),
+            "Top feature importance rows:",
+            permutation_df.head(8).to_string(index=False),
+            "Recent holdout rows:",
+            holdout_results.tail(6).to_string(index=False),
+            "Important framing: this project estimates the monthly closing price using same-month OHLC behavior plus historical context, so it is closer to a scenario-based close estimation system than a pure ahead-of-time trading signal.",
+        ]
+    )
+
+
+def ask_gemini(question: str, assets: Dict[str, object], history: List[Dict[str, str]]) -> str:
+    model_name = os.getenv("GEMINI_MODEL_NAME", "gemini-2.5-flash")
+    client = get_gemini_client()
+
+    transcript = "\n".join(
+        "{0}: {1}".format(item["role"].upper(), item["content"]) for item in history[-8:]
+    )
+    prompt = "\n\n".join(
+        [
+            "You are helping a candidate explain a Yes Bank stock closing price prediction project.",
+            "Keep answers practical, crisp, and grounded in the supplied project facts.",
+            build_gemini_context(assets),
             "Recent chat history:",
-            "\n".join(transcript) if transcript else "No previous messages.",
+            transcript if transcript else "No previous messages.",
             "User question:",
             question,
         ]
     )
 
-    client = get_azure_client()
-    response = client.responses.create(
-        model=deployment_name,
-        instructions=system_prompt,
-        input=user_prompt,
-    )
-    return response.output_text.strip()
+    response = client.models.generate_content(model=model_name, contents=prompt)
+    return (response.text or "").strip()
 
 
-def render_overview_tab(assets: Dict[str, object]) -> None:
+def render_overview_metrics(assets: Dict[str, object]) -> None:
     raw_df = assets["raw_df"]
-    metrics_df = assets["metrics_df"]
     final_payload = assets["final_payload"]
-    holdout_results = assets["holdout_results"]
-    permutation_df = assets["permutation_df"]
-
     latest_row = raw_df.iloc[-1]
     holdout_metrics = final_payload["holdout_metrics"]
 
-    metric_columns = st.columns(4)
-    metric_columns[0].metric("Dataset Rows", len(raw_df))
+    metric_columns = st.columns(5)
+    metric_columns[0].metric("Rows", len(raw_df))
     metric_columns[1].metric("Latest Close", "{0:.2f}".format(latest_row["Close"]))
-    metric_columns[2].metric("Holdout RMSE", "{0:.2f}".format(holdout_metrics["RMSE"]))
-    metric_columns[3].metric("Holdout R2", "{0:.3f}".format(holdout_metrics["R2"]))
+    metric_columns[2].metric("Best Holdout RMSE", "{0:.2f}".format(holdout_metrics["RMSE"]))
+    metric_columns[3].metric("Best Holdout R²", "{0:.3f}".format(holdout_metrics["R2"]))
+    metric_columns[4].metric("Forecast Month", "{0:%b %Y}".format(next_forecast_date(raw_df)))
 
-    left_col, right_col = st.columns((1.6, 1))
 
-    with left_col:
+def render_model_lab(assets: Dict[str, object]) -> None:
+    raw_df = assets["raw_df"]
+    metrics_df = assets["metrics_df"]
+    final_model = assets["final_model"]
+    final_payload = assets["final_payload"]
+    coefficient_df = assets["coefficient_df"]
+    permutation_df = assets["permutation_df"]
+    holdout_results = assets["holdout_results"]
+    default_row = raw_df.iloc[-1]
+    suggested_date = next_forecast_date(raw_df)
+
+    col1, col2 = st.columns((1, 1))
+
+    with col1:
         st.markdown('<div class="section-card">', unsafe_allow_html=True)
-        st.subheader("Closing Price Trend")
-        chart_df = raw_df.copy()
-        chart_df["MA_3"] = chart_df["Close"].rolling(3).mean()
-        chart_df["MA_12"] = chart_df["Close"].rolling(12).mean()
-
-        fig, ax = plt.subplots(figsize=(11, 4.6))
-        ax.plot(chart_df["Date"], chart_df["Close"], color="#103c5a", linewidth=2.2, label="Close")
-        ax.plot(chart_df["Date"], chart_df["MA_3"], color="#d2872c", linewidth=1.8, label="3M MA")
-        ax.plot(chart_df["Date"], chart_df["MA_12"], color="#7a8b99", linewidth=1.6, label="12M MA")
-        ax.axvline(pd.Timestamp("2018-01-01"), linestyle="--", color="#9c3a2b", linewidth=1.2)
-        ax.text(pd.Timestamp("2018-03-01"), chart_df["Close"].max() * 0.92, "2018 stress period", color="#9c3a2b")
-        ax.set_xlabel("Date")
-        ax.set_ylabel("Price")
-        ax.legend(frameon=False, loc="upper left")
-        ax.grid(alpha=0.16)
-        st.pyplot(fig, clear_figure=True)
-        st.caption(
-            "The post-2018 period is visibly more unstable, which is why the project adds structural-break indicators."
-        )
-        st.markdown("</div>", unsafe_allow_html=True)
-
-    with right_col:
-        st.markdown('<div class="section-card">', unsafe_allow_html=True)
-        st.subheader("Model Comparison")
+        st.subheader("Evaluation Summary")
         st.dataframe(
             metrics_df.style.format({"MAE": "{:.2f}", "RMSE": "{:.2f}", "R2": "{:.3f}"}),
             use_container_width=True,
             hide_index=True,
         )
         st.caption(
-            "Regularized linear models outperform the tree-based models here, which suggests a strong linear relationship between monthly price levels and the closing price."
+            "Linear and regularized linear models dominate the holdout summary, while KNN and tree-based models trail once chronology is preserved."
         )
         st.markdown("</div>", unsafe_allow_html=True)
 
-    bottom_left, bottom_right = st.columns((1, 1))
-
-    with bottom_left:
+    with col2:
         st.markdown('<div class="section-card">', unsafe_allow_html=True)
-        st.subheader("Top Drivers")
-        fig, ax = plt.subplots(figsize=(8, 4.6))
-        top_features = permutation_df.head(8).iloc[::-1]
-        ax.barh(top_features["feature"], top_features["importance_mean"], color="#174d72")
-        ax.set_xlabel("Permutation Importance")
-        ax.set_ylabel("")
-        ax.grid(axis="x", alpha=0.15)
-        st.pyplot(fig, clear_figure=True)
+        st.subheader("Best Model Parameters")
+        st.json(final_payload["best_params"])
+        st.markdown("**Top coefficient drivers**")
+        st.dataframe(
+            coefficient_df.head(8).style.format(
+                {"coefficient": "{:.4f}", "abs_coefficient": "{:.4f}"}
+            ),
+            use_container_width=True,
+            hide_index=True,
+        )
         st.markdown("</div>", unsafe_allow_html=True)
 
-    with bottom_right:
+    col3, col4 = st.columns((1, 1))
+
+    with col3:
         st.markdown('<div class="section-card">', unsafe_allow_html=True)
-        st.subheader("Interview Talking Points")
-        st.markdown(
-            """
-            - The holdout split is chronological, not random, to respect time order.
-            - Target conditioning was tested with `log1p`, but the raw target performed better.
-            - Multicollinearity is expected in OHLC data, so the project uses both correlation inspection and regularized models.
-            - The deployed app is intentionally framed as a monthly close estimation tool, not a trading signal generator.
-            """
+        st.subheader("Holdout Actual vs Predicted")
+        st.dataframe(
+            holdout_results.style.format(
+                {
+                    "Actual": "{:.2f}",
+                    "Predicted": "{:.2f}",
+                    "Residual": "{:.2f}",
+                    "Absolute Error": "{:.2f}",
+                }
+            ),
+            use_container_width=True,
+            hide_index=True,
+            height=420,
+        )
+        st.markdown("</div>", unsafe_allow_html=True)
+
+    with col4:
+        st.markdown('<div class="section-card">', unsafe_allow_html=True)
+        st.subheader("Permutation Feature Importance")
+        st.dataframe(
+            permutation_df.head(10).style.format(
+                {"importance_mean": "{:.4f}", "importance_std": "{:.4f}"}
+            ),
+            use_container_width=True,
+            hide_index=True,
+            height=420,
         )
         st.markdown("</div>", unsafe_allow_html=True)
 
     st.markdown('<div class="section-card">', unsafe_allow_html=True)
-    st.subheader("Holdout Actual vs Predicted Table")
-    st.markdown(
-        "This is the full chronological holdout comparison used in the notebook, including residuals and absolute error."
-    )
-    st.dataframe(
-        holdout_results.style.format(
-            {
-                "Actual": "{:.2f}",
-                "Predicted": "{:.2f}",
-                "Residual": "{:.2f}",
-                "Absolute Error": "{:.2f}",
-            }
-        ),
-        use_container_width=True,
-        hide_index=True,
-        height=420,
-    )
-    st.caption(
-        "Positive residuals mean the actual close was above the model prediction; negative residuals mean the model overpredicted."
-    )
-    st.markdown("</div>", unsafe_allow_html=True)
-
-
-def render_predictor_tab(assets: Dict[str, object]) -> None:
-    raw_df = assets["raw_df"]
-    final_model = assets["final_model"]
-    default_row = raw_df.iloc[-1]
-    suggested_date = next_forecast_date(raw_df)
-
-    st.markdown('<div class="section-card">', unsafe_allow_html=True)
-    st.subheader("Scenario-Based Close Price Estimator")
-    st.markdown(
-        "Enter a monthly price scenario to estimate the closing price. This works best when you already have a plausible range for that month."
-    )
-
-    col1, col2 = st.columns(2)
-    with col1:
+    st.subheader("Scenario-Based Closing Price Estimator")
+    input_col1, input_col2 = st.columns(2)
+    with input_col1:
         forecast_date = st.date_input(
             "Forecast month",
             value=suggested_date.to_pydatetime().date(),
-            help="The app uses the month and the recent close history to build the feature row.",
         )
         open_price = st.number_input("Open price", min_value=0.01, value=float(default_row["Open"]))
-    with col2:
+    with input_col2:
         high_price = st.number_input("High price", min_value=0.01, value=float(default_row["High"]))
         low_price = st.number_input("Low price", min_value=0.01, value=float(default_row["Low"]))
 
@@ -350,102 +306,101 @@ def render_predictor_tab(assets: Dict[str, object]) -> None:
                 low_price=low_price,
                 feature_columns=FEATURE_COLUMNS,
             )
-            expected_return = ((prediction - open_price) / open_price) * 100 if open_price else 0.0
-            pred_cols = st.columns(3)
-            pred_cols[0].metric("Predicted Close", "{0:.2f}".format(prediction))
-            pred_cols[1].metric("Expected Return vs Open", "{0:.2f}%".format(expected_return))
-            pred_cols[2].metric("Monthly Range", "{0:.2f}".format(high_price - low_price))
-            st.success(
-                "Scenario estimated successfully. Use this to discuss how the model reacts to different monthly trading ranges."
+            result_cols = st.columns(3)
+            result_cols[0].metric("Predicted Close", "{0:.2f}".format(prediction))
+            result_cols[1].metric(
+                "Expected Return vs Open",
+                "{0:.2f}%".format(((prediction - open_price) / open_price) * 100 if open_price else 0.0),
             )
+            result_cols[2].metric("Monthly Range", "{0:.2f}".format(high_price - low_price))
         except Exception as exc:  # pylint: disable=broad-except
             st.error(str(exc))
-
     st.caption(
-        "Because the model uses same-month Open/High/Low information, this predictor is best presented as a scenario estimator rather than a pure ahead-of-time forecast."
+        "This estimator works best when the monthly open, high, and low are known or can be sensibly assumed."
     )
     st.markdown("</div>", unsafe_allow_html=True)
 
 
-def render_genai_tab(assets: Dict[str, object]) -> None:
+def render_gemini_tab(assets: Dict[str, object]) -> None:
     st.markdown('<div class="section-card">', unsafe_allow_html=True)
-    st.subheader("Azure GenAI Copilot")
+    st.subheader("Gemini Copilot")
     st.markdown(
-        "Use Azure OpenAI to answer interview questions about the project, the model choice, and the business insights."
+        "Ask Gemini to explain the business context, model trade-offs, evaluation results, and project story in interview-ready language."
     )
 
-    if "azure_messages" not in st.session_state:
-        st.session_state.azure_messages = []
+    if "gemini_messages" not in st.session_state:
+        st.session_state.gemini_messages = []
 
-    if not azure_assistant_enabled():
-        if OpenAI is None:
-            st.info(
-                "Install the `openai` package from `requirements.txt`, then add the Azure environment variables to enable the chat assistant."
-            )
-        else:
-            st.info(
-                "Add `AZURE_OPENAI_ENDPOINT`, `AZURE_OPENAI_API_KEY`, and `AZURE_OPENAI_DEPLOYMENT_NAME` to enable the chat assistant."
-            )
+    if not gemini_enabled():
+        st.info(
+            "Install `google-genai` and set `GEMINI_API_KEY` to enable Gemini-powered Q&A."
+        )
         st.code(
             "\n".join(
                 [
                     "pip install -r requirements.txt",
-                    "AZURE_OPENAI_ENDPOINT=https://YOUR-RESOURCE-NAME.openai.azure.com",
-                    "AZURE_OPENAI_API_KEY=your_key_here",
-                    "AZURE_OPENAI_DEPLOYMENT_NAME=gpt-4.1-mini",
+                    "export GEMINI_API_KEY='your_api_key_here'",
+                    "export GEMINI_MODEL_NAME='gemini-2.5-flash'",
                 ]
             ),
             language="bash",
         )
     else:
-        for message in st.session_state.azure_messages:
+        for message in st.session_state.gemini_messages:
             with st.chat_message(message["role"]):
                 st.write(message["content"])
 
-        prompt = st.chat_input("Ask about the project, model trade-offs, or deployment story")
+        prompt = st.chat_input("Ask Gemini about the notebook, metrics, findings, or conclusions")
         if prompt:
-            st.session_state.azure_messages.append({"role": "user", "content": prompt})
+            st.session_state.gemini_messages.append({"role": "user", "content": prompt})
             with st.chat_message("user"):
                 st.write(prompt)
 
             try:
-                answer = ask_azure_assistant(prompt, assets, st.session_state.azure_messages)
+                answer = ask_gemini(prompt, assets, st.session_state.gemini_messages)
             except Exception as exc:  # pylint: disable=broad-except
-                answer = "Azure assistant error: {0}".format(exc)
+                answer = "Gemini error: {0}".format(exc)
 
-            st.session_state.azure_messages.append({"role": "assistant", "content": answer})
+            st.session_state.gemini_messages.append({"role": "assistant", "content": answer})
             with st.chat_message("assistant"):
                 st.write(answer)
 
     st.markdown("</div>", unsafe_allow_html=True)
 
 
-def render_deployment_tab(assets: Dict[str, object]) -> None:
-    final_payload = assets["final_payload"]
-    coefficient_df = assets["coefficient_df"]
-
+def render_documents_tab() -> None:
     st.markdown('<div class="section-card">', unsafe_allow_html=True)
-    st.subheader("Deployment Story")
+    st.subheader("Project Deliverables")
     st.markdown(
         """
-        1. Train the regularized regression pipeline on the cleaned monthly stock dataset.
-        2. Serve the model through Streamlit for interactive scenario prediction.
-        3. Add Azure OpenAI to answer natural-language questions about model logic and business implications.
-        4. Deploy on Streamlit Community Cloud, Azure App Service, or a container platform after setting the Azure environment variables.
+        - `Yes_bank_stock_closing_price_prediction.ipynb`
+        - `summary.pdf`
+        - `Yes_Bank Technical Documentation.pdf`
+        - `data_YesBank_StockPrices.csv`
+        - `dashboard.py`
+        - `app.py`
+        - `README.md`
         """
     )
 
-    st.markdown("**Best tuned parameters**")
-    st.json(final_payload["best_params"])
-
-    st.markdown("**Most influential coefficients**")
-    st.dataframe(
-        coefficient_df.head(8).style.format(
-            {"coefficient": "{:.4f}", "abs_coefficient": "{:.4f}"}
-        ),
-        use_container_width=True,
-        hide_index=True,
-    )
+    for filename in [
+        "Yes_bank_stock_closing_price_prediction.ipynb",
+        "summary.pdf",
+        "Yes_Bank Technical Documentation.pdf",
+        "data_YesBank_StockPrices.csv",
+        "dashboard.py",
+        "app.py",
+        "README.md",
+    ]:
+        path = PROJECT_ROOT / filename
+        if path.exists():
+            with open(path, "rb") as handle:
+                st.download_button(
+                    label="Download {0}".format(filename),
+                    data=handle.read(),
+                    file_name=filename,
+                    use_container_width=True,
+                )
     st.markdown("</div>", unsafe_allow_html=True)
 
 
@@ -456,30 +411,32 @@ def main() -> None:
     st.markdown(
         """
         <div class="hero">
-            <h1>Regression - Yes Bank Stock Closing Price Prediction</h1>
-            <p>Machine Learning &amp; GenAI with Microsoft Azure</p>
+            <h1>Yes Bank Stock Closing Price Prediction</h1>
+            <p>Standalone Regression Capstone with Gemini-powered explanations and a presentation-heavy dashboard.</p>
         </div>
         """,
         unsafe_allow_html=True,
     )
 
+    render_overview_metrics(assets)
+
     tabs = st.tabs(
         [
-            "Executive Dashboard",
-            "Scenario Predictor",
-            "Azure GenAI Copilot",
-            "Deployment Notes",
+            "Insight Dashboard",
+            "Model Lab",
+            "Gemini Copilot",
+            "Project Deliverables",
         ]
     )
 
     with tabs[0]:
-        render_overview_tab(assets)
+        dashboard_view.render_dashboard(assets)
     with tabs[1]:
-        render_predictor_tab(assets)
+        render_model_lab(assets)
     with tabs[2]:
-        render_genai_tab(assets)
+        render_gemini_tab(assets)
     with tabs[3]:
-        render_deployment_tab(assets)
+        render_documents_tab()
 
 
 if __name__ == "__main__":

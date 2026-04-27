@@ -1,54 +1,45 @@
 # Colab-Friendly Workflow
 
-This project is set up so Codex can build everything locally first, and Colab can be used afterward as the presentation or execution layer.
+This repository is set up so Codex can build and update the notebook locally, and you can reopen the same work cleanly in Google Colab through GitHub.
 
-## Recommended flow
+## Recommended Flow
 
-1. Keep the project in a normal local folder or Git repo.
-2. Let Codex create or update the notebook and supporting Python files locally.
-3. Regenerate the notebook if needed:
+1. Make code and notebook changes locally in this standalone repository.
+2. Regenerate the notebook:
 
 ```bash
-cd yes-bank-stock-closing-price-prediction
+cd /Users/harshpaul/Documents/yes-bank-stock-closing-price-prediction
 python3 scripts/generate_notebook.py
+python3 scripts/generate_documents.py
 ```
 
-4. Commit and push the notebook to GitHub:
+3. Commit and push the updated files:
 
 ```bash
+cd /Users/harshpaul/Documents/yes-bank-stock-closing-price-prediction
 git add .
-git commit -m "feat: update yes bank colab notebook"
+git commit -m "feat: refresh yes bank notebook and project docs"
 git push origin main
 ```
 
-5. Generate a GitHub-backed Colab link:
+4. Generate or open the Colab link:
 
 ```bash
-python3 scripts/colab_link.py \
-  notebooks/regression_yes_bank_stock_closing_price_prediction.ipynb
+cd /Users/harshpaul/Documents/yes-bank-stock-closing-price-prediction
+python3 scripts/colab_link.py Yes_bank_stock_closing_price_prediction.ipynb --open
 ```
 
-6. Open that Colab URL in the browser, or pass `--open` to open it automatically.
+## Why This Works Well
 
-## Why this works well
+- Codex can safely edit normal local files.
+- GitHub becomes the single source for the notebook version you want to present.
+- Colab opens the exact notebook from the repository without needing manual copy-paste into a Drive notebook.
 
-- Codex edits stable local files instead of a fragile browser tab.
-- GitHub becomes the source of truth for reopening the same notebook in Colab.
-- The notebook can be regenerated from code if you later change the project logic.
+## Primary Notebook Paths
 
-## Example
+- Root presentation notebook:
+  `Yes_bank_stock_closing_price_prediction.ipynb`
+- Mirrored legacy notebook path:
+  `notebooks/regression_yes_bank_stock_closing_price_prediction.ipynb`
 
-After the notebook is pushed, the Colab URL will look like this shape:
-
-```text
-https://colab.research.google.com/github/<user>/<repo>/blob/<branch>/<path-to-notebook>.ipynb
-```
-
-## Important note
-
-If a notebook exists only inside a live Google Drive Colab tab, Codex cannot reliably update it directly. The best long-term workflow is:
-
-- local project files
-- Git commit history
-- optional GitHub push
-- Colab opened from GitHub
+The generator updates both files together so GitHub and Colab links remain stable.

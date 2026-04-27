@@ -10,9 +10,10 @@ from sklearn.compose import ColumnTransformer
 from sklearn.ensemble import GradientBoostingRegressor, RandomForestRegressor
 from sklearn.impute import SimpleImputer
 from sklearn.inspection import permutation_importance
-from sklearn.linear_model import ElasticNet, Lasso, Ridge
+from sklearn.linear_model import ElasticNet, Lasso, LinearRegression, Ridge
 from sklearn.metrics import mean_absolute_error, mean_squared_error, r2_score
 from sklearn.model_selection import GridSearchCV, TimeSeriesSplit
+from sklearn.neighbors import KNeighborsRegressor
 from sklearn.pipeline import Pipeline
 from sklearn.preprocessing import StandardScaler
 
@@ -44,6 +45,24 @@ FEATURE_COLUMNS = [
 ]
 
 TARGET_COLUMN = "Close"
+
+
+def resolve_default_data_path(project_root: Union[str, Path]) -> Path:
+    """Resolve the preferred raw data path inside the standalone project."""
+    root = Path(project_root)
+    candidates = [
+        root / "data_YesBank_StockPrices.csv",
+        root / "data" / "data_YesBank_StockPrices.csv",
+        root / "data" / "yes_bank_stock_prices.csv",
+    ]
+    for candidate in candidates:
+        if candidate.exists():
+            return candidate
+    raise FileNotFoundError(
+        "Could not locate the Yes Bank dataset. Expected one of: {0}".format(
+            ", ".join(str(item) for item in candidates)
+        )
+    )
 
 
 def load_yes_bank_data(csv_path: Union[str, Path]) -> pd.DataFrame:
@@ -159,9 +178,11 @@ def naive_baseline_metrics(model_df: pd.DataFrame, test_ratio: float = 0.2) -> D
 def get_candidate_models() -> Dict[str, object]:
     """Return interview-friendly baseline model candidates."""
     return {
+        "Linear Regression": LinearRegression(),
+        "KNN Regressor": KNeighborsRegressor(n_neighbors=3),
         "Lasso Regression": Lasso(alpha=0.2, max_iter=20000),
         "Ridge Regression": Ridge(alpha=1.0),
-        "ElasticNet": ElasticNet(alpha=0.1, l1_ratio=0.9, max_iter=20000),
+        "ElasticNet Regression": ElasticNet(alpha=0.1, l1_ratio=0.9, max_iter=20000),
         "Random Forest": RandomForestRegressor(
             n_estimators=400,
             max_depth=8,
@@ -222,7 +243,7 @@ def evaluate_models(
 def tune_regularized_models(
     model_df: pd.DataFrame,
     feature_columns: Optional[Iterable[str]] = None,
-    cv_splits: int = 5,
+    cv_splits: int = 4,
 ) -> Tuple[pd.DataFrame, Dict[str, GridSearchCV]]:
     """Tune the regularized linear models with time series cross-validation."""
     columns = list(feature_columns or FEATURE_COLUMNS)
@@ -240,7 +261,7 @@ def tune_regularized_models(
             Ridge(),
             {"model__alpha": [0.1, 1.0, 5.0, 10.0, 20.0, 50.0]},
         ),
-        "ElasticNet": (
+        "ElasticNet Regression": (
             ElasticNet(max_iter=20000),
             {
                 "model__alpha": [0.01, 0.05, 0.1, 0.2, 0.5],
