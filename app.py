@@ -18,7 +18,7 @@ try:
 except ModuleNotFoundError:
     genai = None
 
-import dashboard as dashboard_view  # noqa: E402
+import dashboard_view  # noqa: E402
 from yes_bank_ml import (  # noqa: E402
     FEATURE_COLUMNS,
     build_modeling_frame,
@@ -377,7 +377,9 @@ def render_documents_tab() -> None:
         - `summary.pdf`
         - `Yes_Bank Technical Documentation.pdf`
         - `data_YesBank_StockPrices.csv`
-        - `dashboard.py`
+        - `dashboard/README.md`
+        - `dashboard/dashboard_preview.png`
+        - `dashboard_view.py`
         - `app.py`
         - `README.md`
         """
@@ -388,7 +390,9 @@ def render_documents_tab() -> None:
         "summary.pdf",
         "Yes_Bank Technical Documentation.pdf",
         "data_YesBank_StockPrices.csv",
-        "dashboard.py",
+        "dashboard/dashboard_preview.png",
+        "dashboard/README.md",
+        "dashboard_view.py",
         "app.py",
         "README.md",
     ]:

@@ -34,15 +34,19 @@ That makes it a strong interview project because it combines:
 ├── summary.pdf
 ├── data_YesBank_StockPrices.csv
 ├── app.py
-├── dashboard.py
+├── dashboard/
+│   ├── README.md
+│   └── dashboard_preview.png
 ├── data/
 │   └── yes_bank_stock_prices.csv
 ├── notebooks/
 │   └── regression_yes_bank_stock_closing_price_prediction.ipynb
 ├── scripts/
 │   ├── colab_link.py
+│   ├── generate_dashboard_assets.py
 │   ├── generate_documents.py
 │   └── generate_notebook.py
+├── dashboard_view.py
 └── src/
     └── yes_bank_ml.py
 ```
@@ -98,6 +102,8 @@ The app is built with **Streamlit** and includes:
 - a **Gemini API** assistant for interview-style questions and project explanations
 - downloadable project deliverables directly from the interface
 
+For GitHub readability, the repository also includes a visual dashboard deliverable in [dashboard/README.md](./dashboard/README.md) so reviewers can see the dashboard story as a diagram/preview instead of only browsing Python code.
+
 Run locally:
 
 ```bash
@@ -105,6 +111,7 @@ git clone https://github.com/harshpaul1999-tech/yes-bank-stock-closing-price-pre
 cd yes-bank-stock-closing-price-prediction
 python3 scripts/generate_notebook.py
 python3 scripts/generate_documents.py
+python3 scripts/generate_dashboard_assets.py
 streamlit run app.py
 ```
 
