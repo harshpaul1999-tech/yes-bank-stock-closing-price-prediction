@@ -66,6 +66,9 @@ def build_cells() -> list[dict]:
 
             Standalone repository for this project:  
             [https://github.com/harshpaul1999-tech/yes-bank-stock-closing-price-prediction](https://github.com/harshpaul1999-tech/yes-bank-stock-closing-price-prediction)
+
+            Public interactive web app for this project:  
+            [https://yes-bank-stock-prediction.onrender.com](https://yes-bank-stock-prediction.onrender.com)
             """
         ),
         md_cell(
