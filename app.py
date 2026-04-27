@@ -52,6 +52,19 @@ def inject_styles() -> None:
             color: #112336;
             font-family: "Aptos", "Segoe UI", sans-serif;
         }
+        .stApp h1, .stApp h2, .stApp h3, .stApp h4, .stApp h5, .stApp h6 {
+            color: #102738;
+        }
+        .stApp p,
+        .stApp li,
+        .stApp label,
+        .stApp span,
+        .stApp div {
+            color: #173047;
+        }
+        .hero, .hero h1, .hero p {
+            color: #f7f9fc !important;
+        }
         .hero {
             padding: 1.4rem 1.6rem;
             border-radius: 22px;
@@ -82,6 +95,43 @@ def inject_styles() -> None:
         .mini-note {
             color: #516273;
             font-size: 0.92rem;
+        }
+        div[data-baseweb="tab-list"] button {
+            color: #173047 !important;
+            font-weight: 700 !important;
+        }
+        div[data-baseweb="tab-list"] button[aria-selected="true"] {
+            color: #0d4672 !important;
+            background: rgba(23, 78, 114, 0.10) !important;
+            border-radius: 10px !important;
+        }
+        label[data-testid="stWidgetLabel"] p,
+        .stDateInput label p,
+        .stNumberInput label p,
+        .stTextInput label p,
+        .stSelectbox label p {
+            color: #173047 !important;
+            font-weight: 700 !important;
+        }
+        div[data-testid="stMetricLabel"] p {
+            color: #355066 !important;
+            font-weight: 700 !important;
+        }
+        div[data-testid="stMetricValue"] {
+            color: #102738 !important;
+        }
+        div[data-baseweb="input"] input,
+        div[data-baseweb="textarea"] textarea,
+        .stTextInput input,
+        .stTextArea textarea {
+            color: #102738 !important;
+            -webkit-text-fill-color: #102738 !important;
+        }
+        .stMarkdown a {
+            color: #0d5b8f !important;
+        }
+        .stDataFrame, .stTable {
+            color: #102738 !important;
         }
         </style>
         """,

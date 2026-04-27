@@ -138,6 +138,16 @@ Helper command:
 python3 scripts/colab_link.py Yes_bank_stock_closing_price_prediction.ipynb --open
 ```
 
+## Public Deployment
+
+The repository now includes [render.yaml](./render.yaml) so the Streamlit app can be deployed as a public Render web service directly from this GitHub repo.
+
+Start command used by Render:
+
+```bash
+streamlit run app.py --server.port $PORT --server.address 0.0.0.0
+```
+
 ## Conclusion
 
 Yes Bank’s closing price can be estimated very effectively when same-month OHLC structure and recent price memory are used together. The dataset is not difficult because it is noisy; it is difficult because the stock enters a new regime after 2018. That makes this project a useful demonstration of why **time-aware evaluation, careful feature engineering, and regularized linear models** matter more than blindly using more complex algorithms.
