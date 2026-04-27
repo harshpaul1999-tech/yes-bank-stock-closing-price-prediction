@@ -1,0 +1,4 @@
+.mplconfig/
+__pycache__/
+*.pyc
+
