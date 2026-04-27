@@ -125,20 +125,40 @@ def build_cells() -> list[dict]:
                 Path.cwd().parent / "data" / "yes_bank_stock_prices.csv",
             ]
 
+            DATA_URL_CANDIDATES = [
+                "https://raw.githubusercontent.com/harshpaul1999-tech/yes-bank-stock-closing-price-prediction/main/data_YesBank_StockPrices.csv",
+                "https://raw.githubusercontent.com/harshpaul1999-tech/yes-bank-stock-closing-price-prediction/main/data/yes_bank_stock_prices.csv",
+            ]
+
             DATA_PATH = None
+            DATA_SOURCE = None
             for candidate in DATA_CANDIDATES:
                 if candidate.exists():
                     DATA_PATH = candidate
+                    DATA_SOURCE = str(candidate)
                     break
 
-            if DATA_PATH is None:
-                raise FileNotFoundError("Could not locate data_YesBank_StockPrices.csv in the project.")
+            if DATA_PATH is not None:
+                df = pd.read_csv(DATA_PATH)
+            else:
+                df = None
+                for data_url in DATA_URL_CANDIDATES:
+                    try:
+                        df = pd.read_csv(data_url)
+                        DATA_SOURCE = data_url
+                        break
+                    except Exception:
+                        continue
 
-            df = pd.read_csv(DATA_PATH)
+                if df is None:
+                    raise FileNotFoundError(
+                        "Could not locate data_YesBank_StockPrices.csv locally or through the GitHub raw file fallback."
+                    )
+
             df["Date"] = pd.to_datetime(df["Date"], format="%b-%y")
             df = df.sort_values("Date").reset_index(drop=True)
 
-            print("Dataset path:", DATA_PATH)
+            print("Dataset source:", DATA_SOURCE)
             df.head()
             """
         ),
