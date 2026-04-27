@@ -306,6 +306,13 @@ def build_cells() -> list[dict]:
         ),
         code_cell(
             """
+            if "Range_Value" not in df.columns:
+                df["Range_Value"] = df["High"] - df["Low"]
+            if "Intramonth_Return_Pct" not in df.columns:
+                df["Intramonth_Return_Pct"] = ((df["Close"] - df["Open"]) / df["Open"]) * 100
+            if "Regime" not in df.columns:
+                df["Regime"] = np.where(df["Date"] < pd.Timestamp("2018-01-01"), "Before 2018", "2018 onward")
+
             regime_summary = (
                 df.groupby("Regime")
                 .agg(
